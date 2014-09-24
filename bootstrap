@@ -1,0 +1,6 @@
+#!/bin/bash
+mkdir -p ./nodes
+cp ./submodules/postgres/files/postgres_node ./nodes/postgres
+chmod 755 ./nodes/postgres
+
+capbash install docker

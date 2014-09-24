@@ -1,0 +1,3 @@
+#!/bin/bash
+./submodules/docker/install
+./submodules/postgres/install
