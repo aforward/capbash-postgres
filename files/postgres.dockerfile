@@ -46,7 +46,7 @@ RUN chmod +x /usr/local/bin/psqlentry
 
 ENTRYPOINT ["/usr/local/bin/psqlentry"]
 
-RUN echo "psql -h \$PSQLDB_PORT_5432_TCP_ADDR -p \$PSQLDB_PORT_5432_TCP_PORT -U postgres" > /usr/local/bin/psqldb
+RUN echo "psql -h \$PSQLDB_PORT_5432_TCP_ADDR -p \$PSQLDB_PORT_5432_TCP_PORT -U postgres \$@" > /usr/local/bin/psqldb
 RUN chmod 755 /usr/local/bin/psqldb
 
 EXPOSE 5432

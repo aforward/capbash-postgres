@@ -7,8 +7,9 @@
 POSTGRES_LAUNCHER_DIR=${POSTGRES_LAUNCHER_DIR-/var/local/postgres}
 POSTGRES_LOG_DIR=${POSTGRES_LOG_FILE-/var/log/postgres}
 POSTGRES_DATA_DIR=${POSTGRES_DATA_DIR-/var/local/postgres/data}
+POSTGRES_SENSITIVE_DIR=${POSTGRES_SENSITIVE_DIR-/var/local/postgres/sensitive}
 POSTGRES_PORT=${POSTGRES_PORT-5432}
-POSTGRES_ADMIN_USERNAME=${POSTGRES_ADMIN_USERNAME-admin}
+POSTGRES_ADMIN_USERNAME=${POSTGRES_ADMIN_USERNAME-postgres}
 POSTGRES_ADMIN_PASSWORD=${POSTGRES_ADMIN_PASSWORD-yth3fn0t}
 DEBUG=${DEBUG-false}
 
@@ -18,17 +19,21 @@ DEBUG=${DEBUG-false}
 
 echo "Installing POSTGRES..."
 
-mkdir -p ${POSTGRES_LAUNCHER_DIR}/config ${POSTGRES_LOG_DIR} ${POSTGRES_DATA_DIR}
+if [[ "`which psql 2> /dev/null`" == "" ]]; then
+  echo "  -- Installing psql"
+  if [[ "$OS" == "redhat" ]]; then
+    yum install -y postgresql
+  else
+    apt-get install -y postgresql-client
+  fi
+fi
+
+mkdir -p ${POSTGRES_LAUNCHER_DIR}/config ${POSTGRES_LOG_DIR} ${POSTGRES_DATA_DIR} ${POSTGRES_SENSITIVE_DIR}
 
 cp ./submodules/postgres/files/postgres.dockerfile ${POSTGRES_LAUNCHER_DIR}/Dockerfile
 cp -u ./submodules/postgres/files/psqlentry ${POSTGRES_LAUNCHER_DIR}/config/psqlentry
 
-
-if [[ "$DEBUG" == true ]]; then
-  (cd ${POSTGRES_LAUNCHER_DIR} && docker build -t postgres .)
-else
-  (cd ${POSTGRES_LAUNCHER_DIR} && docker build -t postgres .) >> /dev/null
-fi
+DEBUG=$DEBUG LAUNCHER_DIR=$POSTGRES_LAUNCHER_DIR NAME=postgres ./submodules/docker/build
 
 echo "#!/bin/bash
 docker run -i -t \\
@@ -39,6 +44,7 @@ docker run -i -t \\
 " > ${POSTGRES_LAUNCHER_DIR}/debug
 
 printf "%b" "#!/bin/bash
+echo \"Starting POSTGRES ($POSTGRES_PORT, $POSTGRES_DATA_DIR)...\"
 docker rm postgres > /dev/num
 docker run -d -t \\
   -p ${POSTGRES_PORT}:5432 \\
@@ -46,14 +52,67 @@ docker run -d -t \\
   -v ${POSTGRES_DATA_DIR}:/var/lib/postgresql/data \\
   --name postgres \\
   postgres
+
+IP=\$(${POSTGRES_LAUNCHER_DIR}/ip)
+
+if [[ \"\$IP\" == '' ]]; then
+  echo 'No IP address assigned when starting POSTGRES, not sure what went wrong.'
+  exit 1
+fi
+
+echo \"DONE, Starting POSTGRES $IP ($POSTGRES_PORT, $POSTGRES_DATA_DIR).\"
+
+if [[ \"\`cat /etc/hosts | grep postgres.local\`\" == '' ]]; then
+  echo \"Adding postgres.local (\$IP) to /etc/hosts\"
+  echo \"\$IP postgres.local\" >> /etc/hosts
+else
+  echo \"Updating postgres.local (\$IP) in /etc/hosts\"
+  sed -i \"s|.*postgres.local|\$IP postgres.local|g\" /etc/hosts
+fi
 " > ${POSTGRES_LAUNCHER_DIR}/start
 
-NAME=postgres DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/stop
+
+printf "%b" "#!/bin/bash
+USER=\${USER-$POSTGRES_ADMIN_USERNAME}
+PASSWORD=\${PASSWORD-$POSTGRES_ADMIN_PASSWORD}
+DATABASE=\${DATABASE}
+PGPASSFILE=${POSTGRES_SENSITIVE_DIR}/\${DATABASE}.pgpass
+
+mkdir -p ${POSTGRES_SENSITIVE_DIR}
+echo \"\" > \$PGPASSFILE
+echo \"#hostname:port:database:username:password\" >> \$PGPASSFILE
+echo \"*:*:\$DATABASE:\$USER:\$PASSWORD\" >> \$PGPASSFILE
+chmod 600 \$PGPASSFILE
+" > ${POSTGRES_LAUNCHER_DIR}/pgpass
+
+printf "%b" "#!/bin/bash
+DATABASE=\${1-mydb}
+USER=\${2-$POSTGRES_ADMIN_USERNAME}
+PASSWORD=\${3-$POSTGRES_ADMIN_PASSWORD}
+TEMPLATE=\${4-DEFAULT}
+PGPASSFILE=${POSTGRES_SENSITIVE_DIR}/\${DATABASE}.pgpass
+DBFILE=${POSTGRES_LAUNCHER_DIR}/db/\$DATABASE
+
+# USE a pgpassfile when passwords are set, e.g. PGPASSFILE=/cenx/sensitive/postgres.pgpass
+PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"CREATE USER \$USER WITH SUPERUSER;\" > /dev/null
+PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"ALTER USER \$USER WITH PASSWORD '\$PASSWORD';\" > /dev/null
+PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"CREATE DATABASE \$DATABASE OWNER \$USER TEMPLATE \$TEMPLATE;\" > /dev/null
+
+DATABASE=\$DATABASE USER=\$USER PASSWORD=\$PASSWORD ${POSTGRES_LAUNCHER_DIR}/pgpass
+mkdir -p ${POSTGRES_LAUNCHER_DIR}/db
+
+echo \"PGUSER=\$USER PGHOST=postgres.local PGDATABASE=\$DATABASE PGPASSFILE=\$PGPASSFILE psql \\\$@\" > \$DBFILE
+chmod 755 \$DBFILE
+" > ${POSTGRES_LAUNCHER_DIR}/newdb
+
+NAME=postgres HOST=postgres.local DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/stop
 NAME=postgres DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/idempot
 NAME=postgres DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/ip
 
 chmod 755 $POSTGRES_LAUNCHER_DIR/start
 chmod 755 $POSTGRES_LAUNCHER_DIR/debug
 chmod 755 $POSTGRES_LAUNCHER_DIR/ip
+chmod 755 $POSTGRES_LAUNCHER_DIR/newdb
+chmod 755 $POSTGRES_LAUNCHER_DIR/pgpass
 
 echo "Done, Installing POSTGRES."
