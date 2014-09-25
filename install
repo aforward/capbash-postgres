@@ -28,13 +28,14 @@ if [[ "`which psql 2> /dev/null`" == "" ]]; then
   fi
 fi
 
+echo "  -- Copying config files"
 mkdir -p ${POSTGRES_LAUNCHER_DIR}/config ${POSTGRES_LOG_DIR} ${POSTGRES_DATA_DIR} ${POSTGRES_SENSITIVE_DIR}
-
 cp ./submodules/postgres/files/postgres.dockerfile ${POSTGRES_LAUNCHER_DIR}/Dockerfile
 cp -u ./submodules/postgres/files/psqlentry ${POSTGRES_LAUNCHER_DIR}/config/psqlentry
 
 DEBUG=$DEBUG LAUNCHER_DIR=$POSTGRES_LAUNCHER_DIR NAME=postgres ./submodules/docker/build
 
+echo "  -- Creating helper scripts"
 echo "#!/bin/bash
 docker run -i -t \\
   -v ${POSTGRES_LOG_DIR}:/log \\
@@ -44,30 +45,38 @@ docker run -i -t \\
 " > ${POSTGRES_LAUNCHER_DIR}/debug
 
 printf "%b" "#!/bin/bash
-echo \"Starting POSTGRES ($POSTGRES_PORT, $POSTGRES_DATA_DIR)...\"
-docker rm postgres > /dev/num
-docker run -d -t \\
-  -p ${POSTGRES_PORT}:5432 \\
-  -v ${POSTGRES_LOG_DIR}:/log \\
-  -v ${POSTGRES_DATA_DIR}:/var/lib/postgresql/data \\
-  --name postgres \\
-  postgres
+CONTAINER_ID=\`${POSTGRES_LAUNCHER_DIR}/containerid\`
+if [[ \"\$CONTAINER_ID\" == \"\" ]]; then
+  echo \"Starting POSTGRES ($POSTGRES_PORT, $POSTGRES_DATA_DIR)...\"
 
-IP=\$(${POSTGRES_LAUNCHER_DIR}/ip)
+  echo \"  -- Removing any stopped postgres containers\"
+  docker rm postgres >> /dev/null
+  echo \"  -- Starting docker\"
+  docker run -d -t \\
+    -p ${POSTGRES_PORT}:5432 \\
+    -v ${POSTGRES_LOG_DIR}:/log \\
+    -v ${POSTGRES_DATA_DIR}:/var/lib/postgresql/data \\
+    --name postgres \\
+    postgres 2>1 >> /dev/null
 
-if [[ \"\$IP\" == '' ]]; then
-  echo 'No IP address assigned when starting POSTGRES, not sure what went wrong.'
-  exit 1
-fi
+  IP=\$(${POSTGRES_LAUNCHER_DIR}/ip)
 
-echo \"DONE, Starting POSTGRES $IP ($POSTGRES_PORT, $POSTGRES_DATA_DIR).\"
+  if [[ \"\$IP\" == '' ]]; then
+    echo '  -- No IP address assigned when starting POSTGRES, not sure what went wrong.'
+    exit 1
+  fi
 
-if [[ \"\`cat /etc/hosts | grep postgres.local\`\" == '' ]]; then
-  echo \"Adding postgres.local (\$IP) to /etc/hosts\"
-  echo \"\$IP postgres.local\" >> /etc/hosts
+  if [[ \"\`cat /etc/hosts | grep postgres.local\`\" == '' ]]; then
+    echo \"  -- Adding postgres.local (\$IP) to /etc/hosts\"
+    echo \"\$IP postgres.local\" >> /etc/hosts
+  else
+    echo \"  -- Updating postgres.local (\$IP) in /etc/hosts\"
+    sed -i \"s|.*postgres.local|\$IP postgres.local|g\" /etc/hosts
+  fi
+
+  echo \"DONE, Starting POSTGRES $IP\"
 else
-  echo \"Updating postgres.local (\$IP) in /etc/hosts\"
-  sed -i \"s|.*postgres.local|\$IP postgres.local|g\" /etc/hosts
+  echo \"Container postgres already running, ${POSTGRES_LAUNCHER_DIR}/restart to restart it\"
 fi
 " > ${POSTGRES_LAUNCHER_DIR}/start
 
@@ -106,8 +115,10 @@ chmod 755 \$DBFILE
 " > ${POSTGRES_LAUNCHER_DIR}/newdb
 
 NAME=postgres HOST=postgres.local DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/stop
+NAME=postgres DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/restart
 NAME=postgres DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/idempot
 NAME=postgres DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/ip
+NAME=postgres DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/containerid
 
 chmod 755 $POSTGRES_LAUNCHER_DIR/start
 chmod 755 $POSTGRES_LAUNCHER_DIR/debug
