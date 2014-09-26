@@ -45,7 +45,7 @@ docker run -i -t \\
 " > ${POSTGRES_LAUNCHER_DIR}/debug
 
 printf "%b" "#!/bin/bash
-CONTAINER_ID=\`${POSTGRES_LAUNCHER_DIR}/containerid\`
+CONTAINER_ID=\`cat ${POSTGRES_LAUNCHER_DIR}/container.pid 2> /dev/null\`
 if [[ \"\$CONTAINER_ID\" == \"\" ]]; then
   echo \"Starting POSTGRES ($POSTGRES_PORT, $POSTGRES_DATA_DIR)...\"
 
@@ -57,7 +57,7 @@ if [[ \"\$CONTAINER_ID\" == \"\" ]]; then
     -v ${POSTGRES_LOG_DIR}:/log \\
     -v ${POSTGRES_DATA_DIR}:/var/lib/postgresql/data \\
     --name postgres \\
-    postgres 2>1 >> /dev/null
+    postgres 2> /dev/null > ${POSTGRES_LAUNCHER_DIR}/container.pid
 
   IP=\$(${POSTGRES_LAUNCHER_DIR}/ip)
 
@@ -135,11 +135,9 @@ NAME=postgres HOST=postgres.local DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker
 NAME=postgres DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/restart
 NAME=postgres DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/idempot
 NAME=postgres DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/ip
-NAME=postgres DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/containerid
 
 chmod 755 $POSTGRES_LAUNCHER_DIR/start
 chmod 755 $POSTGRES_LAUNCHER_DIR/debug
-chmod 755 $POSTGRES_LAUNCHER_DIR/ip
 chmod 755 $POSTGRES_LAUNCHER_DIR/newdb
 chmod 755 $POSTGRES_LAUNCHER_DIR/pgpass
 
