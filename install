@@ -50,7 +50,7 @@ if [[ \"\$CONTAINER_ID\" == \"\" ]]; then
   echo \"Starting POSTGRES ($POSTGRES_PORT, $POSTGRES_DATA_DIR)...\"
 
   echo \"  -- Removing any stopped postgres containers\"
-  docker rm postgres >> /dev/null
+  docker rm postgres > /dev/null 2>&1
   echo \"  -- Starting docker\"
   docker run -d -t \\
     -p ${POSTGRES_PORT}:5432 \\
