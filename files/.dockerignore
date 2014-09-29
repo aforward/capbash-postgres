@@ -1,0 +1,11 @@
+.git
+.gitignore
+gitattributes
+.travis.yml
+CHANGELOG.md
+CONTRIBUTING.md
+LEGAL
+LICENSE
+README.md
+RELEASE.md
+data
