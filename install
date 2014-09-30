@@ -13,14 +13,26 @@ POSTGRES_ADMIN_USERNAME=${POSTGRES_ADMIN_USERNAME-postgres}
 POSTGRES_ADMIN_PASSWORD=${POSTGRES_ADMIN_PASSWORD-yth3fn0t}
 DEBUG=${DEBUG-false}
 
+POSTGRES_CONF=${POSTGRES_CONF-./submodules/postgres/files/postgresql.conf}
+POSTGRES_MAX_CONNECTIONS=${POSTGRES_MAX_CONNECTIONS-100}
+POSTGRES_SHARED_BUFFERS=${POSTGRES_SHARED_BUFFERS-256MB}
+POSTGRES_MAX_FILES_PER_PROCESS=${POSTGRES_MAX_FILES_PER_PROCESS-1000}
+
+
 #-----------
 # Install Script
 #-----------
 
-echo "Installing POSTGRES..."
+if [[ "$DEBUG" == true ]] ; then
+  exec 3>&1
+else
+  exec 3>&1 &>/dev/null
+fi
+
+echo "Installing POSTGRES..." >&3
 
 if [[ "`which psql 2> /dev/null`" == "" ]]; then
-  echo "  -- Installing psql"
+  echo "  -- Installing psql" >&3
   if [[ "$OS" == "redhat" ]]; then
     yum install -y postgresql
   else
@@ -28,14 +40,17 @@ if [[ "`which psql 2> /dev/null`" == "" ]]; then
   fi
 fi
 
-echo "  -- Copying config files"
+echo "  -- Copying config files" >&3
 mkdir -p ${POSTGRES_LAUNCHER_DIR}/config ${POSTGRES_LOG_DIR} ${POSTGRES_DATA_DIR} ${POSTGRES_SENSITIVE_DIR}
 cp ./submodules/postgres/files/postgres.dockerfile ${POSTGRES_LAUNCHER_DIR}/Dockerfile
 cp -u ./submodules/postgres/files/psqlentry ${POSTGRES_LAUNCHER_DIR}/config/psqlentry
+TEMPLATE=${POSTGRES_CONF} \
+  LOCATION=${POSTGRES_DATA_DIR}/postgresql.conf \
+  ./submodules/docker/copyif @POSTGRES_MAX_CONNECTIONS@ $POSTGRES_MAX_CONNECTIONS @POSTGRES_SHARED_BUFFERS@ $POSTGRES_SHARED_BUFFERS @POSTGRES_MAX_FILES_PER_PROCESS@ $POSTGRES_MAX_FILES_PER_PROCESS
 
 DEBUG=$DEBUG LAUNCHER_DIR=$POSTGRES_LAUNCHER_DIR NAME=postgres ./submodules/docker/build
 
-echo "  -- Creating helper scripts"
+echo "  -- Creating helper scripts" >&3
 echo "#!/bin/bash
 docker run -i -t \\
   -v ${POSTGRES_LOG_DIR}:/log \\
@@ -106,23 +121,19 @@ DBFILE=${POSTGRES_LAUNCHER_DIR}/db/\$DATABASE
 
 # USE a pgpassfile when passwords are set, e.g. PGPASSFILE=/cenx/sensitive/postgres.pgpass
 
-if [[ \"\$DEBUG\" == true ]]; then
-  if [[ \"\$DROP\" == true ]]; then
-    PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"DROP DATABASE \$DATABASE;\"
-    PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"DROP USER \$USER;\"
-  fi
-  PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"CREATE USER \$USER WITH SUPERUSER;\"
-  PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"ALTER USER \$USER WITH PASSWORD '\$PASSWORD';\"
-  PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"CREATE DATABASE \$DATABASE OWNER \$USER TEMPLATE \$TEMPLATE;\"
+if [[ \"\$DEBUG\" == true ]] ; then
+  exec 3>&1
 else
-  if [[ \"\$DROP\" == true ]]; then
-    PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"DROP DATABASE \$DATABASE;\" > /dev/null 2>&1
-    PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"DROP USER \$USER;\" > /dev/null 2>&1
-  fi
-  PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"CREATE USER \$USER WITH SUPERUSER;\" > /dev/null 2>&1
-  PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"ALTER USER \$USER WITH PASSWORD '\$PASSWORD';\" > /dev/null 2>&1
-  PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"CREATE DATABASE \$DATABASE OWNER \$USER TEMPLATE \$TEMPLATE;\" > /dev/null 2>&1
+  exec 3>&1 &>/dev/null
 fi
+
+if [[ \"\$DROP\" == true ]]; then
+  PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"DROP DATABASE \$DATABASE;\"
+  PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"DROP USER \$USER;\"
+fi
+PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"CREATE USER \$USER WITH SUPERUSER;\"
+PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"ALTER USER \$USER WITH PASSWORD '\$PASSWORD';\"
+PGUSER=$POSTGRES_ADMIN_USERNAME PGHOST=postgres.local PGPORT=$POSTGRES_PORT psql -c \"CREATE DATABASE \$DATABASE OWNER \$USER TEMPLATE \$TEMPLATE;\"
 
 DATABASE=\$DATABASE USER=\$USER PASSWORD=\$PASSWORD ${POSTGRES_LAUNCHER_DIR}/pgpass
 mkdir -p ${POSTGRES_LAUNCHER_DIR}/db
@@ -141,4 +152,4 @@ chmod 755 $POSTGRES_LAUNCHER_DIR/debug
 chmod 755 $POSTGRES_LAUNCHER_DIR/newdb
 chmod 755 $POSTGRES_LAUNCHER_DIR/pgpass
 
-echo "Done, Installing POSTGRES."
+echo "Done, Installing POSTGRES." >&3
