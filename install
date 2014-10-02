@@ -23,16 +23,10 @@ POSTGRES_MAX_FILES_PER_PROCESS=${POSTGRES_MAX_FILES_PER_PROCESS-1000}
 # Install Script
 #-----------
 
-if [[ "$DEBUG" == true ]] ; then
-  exec 3>&1
-else
-  exec 3>&1 &>/dev/null
-fi
-
-echo "Installing POSTGRES..." >&3
+echo "Installing POSTGRES..."
 
 if [[ "`which psql 2> /dev/null`" == "" ]]; then
-  echo "  -- Installing psql" >&3
+  echo "  -- Installing psql"
   if [[ "$OS" == "redhat" ]] || [[ "$OS" == "centos" ]]; then
     yum install -y postgresql
   else
@@ -40,17 +34,13 @@ if [[ "`which psql 2> /dev/null`" == "" ]]; then
   fi
 fi
 
-echo "  -- Copying config files" >&3
+echo "  -- Copying config files"
 mkdir -p ${POSTGRES_LAUNCHER_DIR}/config ${POSTGRES_LOG_DIR} ${POSTGRES_DATA_DIR} ${POSTGRES_SENSITIVE_DIR}
 cp ./submodules/postgres/files/postgres.dockerfile ${POSTGRES_LAUNCHER_DIR}/Dockerfile
-cp -u ./submodules/postgres/files/psqlentry ${POSTGRES_LAUNCHER_DIR}/config/psqlentry
-TEMPLATE=${POSTGRES_CONF} \
-  LOCATION=${POSTGRES_DATA_DIR}/postgresql.conf \
-  ./submodules/docker/copyif @POSTGRES_MAX_CONNECTIONS@ $POSTGRES_MAX_CONNECTIONS @POSTGRES_SHARED_BUFFERS@ $POSTGRES_SHARED_BUFFERS @POSTGRES_MAX_FILES_PER_PROCESS@ $POSTGRES_MAX_FILES_PER_PROCESS
-
+TEMPLATE=./submodules/postgres/files/psqlentry LOCATION=${POSTGRES_LAUNCHER_DIR}/config/psqlentry ./submodules/docker/copyif
 DEBUG=$DEBUG LAUNCHER_DIR=$POSTGRES_LAUNCHER_DIR NAME=postgres ./submodules/docker/build
 
-echo "  -- Creating helper scripts" >&3
+echo "  -- Creating helper scripts"
 echo "#!/bin/bash
 docker run -i -t \\
   -v ${POSTGRES_LOG_DIR}:/log \\
@@ -58,6 +48,13 @@ docker run -i -t \\
   --link postgres:psqldb \\
   postgres /bin/bash
 " > ${POSTGRES_LAUNCHER_DIR}/debug
+
+echo "#!/bin/bash
+docker run -i -t \\
+  -v ${POSTGRES_LOG_DIR}:/log \\
+  -v ${POSTGRES_DATA_DIR}:/var/lib/postgresql/data \\
+  postgres init
+" > ${POSTGRES_LAUNCHER_DIR}/init
 
 printf "%b" "#!/bin/bash
 CONTAINER_ID=\`${POSTGRES_LAUNCHER_DIR}/running\`
@@ -144,9 +141,16 @@ chmod 755 \$DBFILE
 
 NAME=postgres HOST=postgres.local DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/helpers
 
+chmod 755 $POSTGRES_LAUNCHER_DIR/init
 chmod 755 $POSTGRES_LAUNCHER_DIR/start
 chmod 755 $POSTGRES_LAUNCHER_DIR/debug
 chmod 755 $POSTGRES_LAUNCHER_DIR/newdb
 chmod 755 $POSTGRES_LAUNCHER_DIR/pgpass
 
-echo "Done, Installing POSTGRES." >&3
+echo "  -- Initializing DB (as needed)"
+$POSTGRES_LAUNCHER_DIR/init
+TEMPLATE=${POSTGRES_CONF} \
+  LOCATION=${POSTGRES_DATA_DIR}/postgresql.conf \
+  ./submodules/docker/copyif @POSTGRES_MAX_CONNECTIONS@ $POSTGRES_MAX_CONNECTIONS @POSTGRES_SHARED_BUFFERS@ $POSTGRES_SHARED_BUFFERS @POSTGRES_MAX_FILES_PER_PROCESS@ $POSTGRES_MAX_FILES_PER_PROCESS
+
+echo "Done, Installing POSTGRES."
