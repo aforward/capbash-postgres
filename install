@@ -33,7 +33,7 @@ echo "Installing POSTGRES..." >&3
 
 if [[ "`which psql 2> /dev/null`" == "" ]]; then
   echo "  -- Installing psql" >&3
-  if [[ "$OS" == "redhat" ]]; then
+  if [[ "$OS" == "redhat" ]] || [[ "$OS" == "centos" ]]; then
     yum install -y postgresql
   else
     apt-get install -y postgresql-client
@@ -60,7 +60,7 @@ docker run -i -t \\
 " > ${POSTGRES_LAUNCHER_DIR}/debug
 
 printf "%b" "#!/bin/bash
-CONTAINER_ID=\`cat ${POSTGRES_LAUNCHER_DIR}/container.pid 2> /dev/null\`
+CONTAINER_ID=\`${POSTGRES_LAUNCHER_DIR}/running\`
 if [[ \"\$CONTAINER_ID\" == \"\" ]]; then
   echo \"Starting POSTGRES ($POSTGRES_PORT, $POSTGRES_DATA_DIR)...\"
 
@@ -142,10 +142,7 @@ echo \"PGUSER=\$USER PGHOST=postgres.local PGDATABASE=\$DATABASE PGPASSFILE=\$PG
 chmod 755 \$DBFILE
 " > ${POSTGRES_LAUNCHER_DIR}/newdb
 
-NAME=postgres HOST=postgres.local DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/stop
-NAME=postgres DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/restart
-NAME=postgres DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/idempot
-NAME=postgres DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/ip
+NAME=postgres HOST=postgres.local DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/helpers
 
 chmod 755 $POSTGRES_LAUNCHER_DIR/start
 chmod 755 $POSTGRES_LAUNCHER_DIR/debug
