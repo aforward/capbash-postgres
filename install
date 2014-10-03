@@ -25,10 +25,13 @@ POSTGRES_MAX_FILES_PER_PROCESS=${POSTGRES_MAX_FILES_PER_PROCESS-1000}
 
 echo "Installing POSTGRES..."
 
-if [[ "`which psql 2> /dev/null`" == "" ]]; then
+if [[ "`which psql 2> /dev/null`" == "" ]] || [[ "`psql --version | grep 9.3`" == "" ]]; then
   echo "  -- Installing psql"
   if [[ "$OS" == "redhat" ]] || [[ "$OS" == "centos" ]]; then
-    yum install -y postgresql
+    mkdir -p /var/tmp
+    yum install -y http://yum.postgresql.org/9.3/redhat/rhel-6-x86_64/pgdg-redhat93-9.3-1.noarch.rpm
+    yum install -y postgresql93-server postgresql93-contrib
+    cp -f /usr/pgsql-9.3/bin/* /usr/local/bin/
   else
     apt-get install -y postgresql-client
   fi
@@ -115,6 +118,8 @@ DROP=\${DROP-false}
 DEBUG=\${DEBUG-false}
 PGPASSFILE=${POSTGRES_SENSITIVE_DIR}/\${DATABASE}.pgpass
 DBFILE=${POSTGRES_LAUNCHER_DIR}/db/\$DATABASE
+DUMPFILE=${POSTGRES_LAUNCHER_DIR}/db/dump_\$DATABASE
+RESTOREFILE=${POSTGRES_LAUNCHER_DIR}/db/restore_\$DATABASE
 
 # USE a pgpassfile when passwords are set, e.g. PGPASSFILE=/cenx/sensitive/postgres.pgpass
 
@@ -136,7 +141,10 @@ DATABASE=\$DATABASE USER=\$USER PASSWORD=\$PASSWORD ${POSTGRES_LAUNCHER_DIR}/pgp
 mkdir -p ${POSTGRES_LAUNCHER_DIR}/db
 
 echo \"PGUSER=\$USER PGHOST=postgres.local PGDATABASE=\$DATABASE PGPASSFILE=\$PGPASSFILE psql \\\$@\" > \$DBFILE
-chmod 755 \$DBFILE
+echo \"PGDATABASE=\$DATABASE PGPASSFILE=\$PGPASSFILE pg_dump --host=postgres.local --dbname=\$DATABASE --username=\$USER --role=\$USER --no-password --format=c --file=\\\$@\" > \$DUMPFILE
+echo \"PGHOST=postgres.local pg_restore --dbname=\$DATABASE --username=\$USER --role=\$USER --create --no-privileges --no-owner --jobs=10 \\\$@\" > \$RESTOREFILE
+
+chmod 755 \$DBFILE \$DUMPFILE \$RESTOREFILE
 " > ${POSTGRES_LAUNCHER_DIR}/newdb
 
 NAME=postgres HOST=postgres.local DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/helpers
