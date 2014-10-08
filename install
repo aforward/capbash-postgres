@@ -142,7 +142,7 @@ mkdir -p ${POSTGRES_LAUNCHER_DIR}/db
 
 echo \"PGUSER=\$USER PGHOST=postgres.local PGDATABASE=\$DATABASE PGPASSFILE=\$PGPASSFILE psql \\\$@\" > \$DBFILE
 echo \"PGDATABASE=\$DATABASE PGPASSFILE=\$PGPASSFILE pg_dump --host=postgres.local --dbname=\$DATABASE --username=\$USER --role=\$USER --no-password --format=c --file=\\\$@\" > \$DUMPFILE
-echo \"PGHOST=postgres.local pg_restore --dbname=\$DATABASE --username=\$USER --role=\$USER --create --no-privileges --no-owner --jobs=10 \\\$@\" > \$RESTOREFILE
+echo \"PGHOST=postgres.local pg_restore --dbname=postgres --username=\$USER --role=\$USER --create --no-privileges --no-owner --jobs=10 \\\$@\" > \$RESTOREFILE
 
 chmod 755 \$DBFILE \$DUMPFILE \$RESTOREFILE
 " > ${POSTGRES_LAUNCHER_DIR}/newdb
