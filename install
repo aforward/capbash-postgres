@@ -1,5 +1,5 @@
 #!/bin/bash
-source ./submodules/bootstrap/logging
+source ./bits/bootstrap/logging
 set -euo pipefail ; IFS=$'\n\t'
 
 #-----------
@@ -14,7 +14,7 @@ POSTGRES_PORT=${POSTGRES_PORT-5432}
 POSTGRES_ADMIN_USERNAME=${POSTGRES_ADMIN_USERNAME-postgres}
 POSTGRES_ADMIN_PASSWORD=${POSTGRES_ADMIN_PASSWORD-yth3fn0t}
 
-POSTGRES_CONF=${POSTGRES_CONF-./submodules/postgres/files/postgresql.conf}
+POSTGRES_CONF=${POSTGRES_CONF-./bits/postgres/files/postgresql.conf}
 POSTGRES_MAX_CONNECTIONS=${POSTGRES_MAX_CONNECTIONS-100}
 POSTGRES_SHARED_BUFFERS=${POSTGRES_SHARED_BUFFERS-256MB}
 POSTGRES_MAX_FILES_PER_PROCESS=${POSTGRES_MAX_FILES_PER_PROCESS-1000}
@@ -40,9 +40,9 @@ fi
 
 notify "  -- Copying config files"
 mkdir -p ${POSTGRES_LAUNCHER_DIR}/config ${POSTGRES_LOG_DIR} ${POSTGRES_DATA_DIR} ${POSTGRES_SENSITIVE_DIR}
-cp ./submodules/postgres/files/postgres.dockerfile ${POSTGRES_LAUNCHER_DIR}/Dockerfile
-TEMPLATE=./submodules/postgres/files/psqlentry LOCATION=${POSTGRES_LAUNCHER_DIR}/config/psqlentry ./submodules/docker/copyif
-LAUNCHER_DIR=$POSTGRES_LAUNCHER_DIR NAME=postgres ./submodules/docker/build
+cp ./bits/postgres/files/postgres.dockerfile ${POSTGRES_LAUNCHER_DIR}/Dockerfile
+TEMPLATE=./bits/postgres/files/psqlentry LOCATION=${POSTGRES_LAUNCHER_DIR}/config/psqlentry ./bits/docker/copyif
+LAUNCHER_DIR=$POSTGRES_LAUNCHER_DIR NAME=postgres ./bits/docker/build
 
 notify "  -- Creating helper scripts"
 echo "#!/bin/bash
@@ -169,7 +169,7 @@ echo \"PGHOST=postgres.local pg_restore --dbname=postgres --username=\$USER --ro
 chmod 755 \$DBFILE \$DUMPFILE \$RESTOREFILE
 " > ${POSTGRES_LAUNCHER_DIR}/accessdb
 
-NAME=postgres HOST=postgres.local DIR=$POSTGRES_LAUNCHER_DIR ./submodules/docker/helpers
+NAME=postgres HOST=postgres.local DIR=$POSTGRES_LAUNCHER_DIR ./bits/docker/helpers
 
 chmod 755 $POSTGRES_LAUNCHER_DIR/init
 chmod 755 $POSTGRES_LAUNCHER_DIR/start
@@ -183,7 +183,7 @@ $POSTGRES_LAUNCHER_DIR/init
 notify "  -- Setting up postgres conf"
 TEMPLATE=${POSTGRES_CONF} \
   LOCATION=${POSTGRES_DATA_DIR}/postgresql.conf \
-  ./submodules/docker/copyif @POSTGRES_MAX_CONNECTIONS@ $POSTGRES_MAX_CONNECTIONS @POSTGRES_SHARED_BUFFERS@ $POSTGRES_SHARED_BUFFERS @POSTGRES_MAX_FILES_PER_PROCESS@ $POSTGRES_MAX_FILES_PER_PROCESS
+  ./bits/docker/copyif @POSTGRES_MAX_CONNECTIONS@ $POSTGRES_MAX_CONNECTIONS @POSTGRES_SHARED_BUFFERS@ $POSTGRES_SHARED_BUFFERS @POSTGRES_MAX_FILES_PER_PROCESS@ $POSTGRES_MAX_FILES_PER_PROCESS
 
 notify "  -- Configuring helper access to postgres"
 $POSTGRES_LAUNCHER_DIR/accessdb postgres $POSTGRES_ADMIN_USERNAME $POSTGRES_ADMIN_PASSWORD
