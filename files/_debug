@@ -1,0 +1,3 @@
+docker run -i -t
+  -v $POSTGRES_LOG_DIR:/log
+  -v $POSTGRES_DATA_DIR:/var/lib/postgresql/data

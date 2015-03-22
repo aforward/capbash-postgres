@@ -6,10 +6,13 @@ set -euo pipefail ; IFS=$'\n\t'
 # Configurations
 #-----------
 
-POSTGRES_LAUNCHER_DIR=${POSTGRES_LAUNCHER_DIR-/var/local/postgres}
-POSTGRES_LOG_DIR=${POSTGRES_LOG_DIR-/var/log/postgres}
-POSTGRES_DATA_DIR=${POSTGRES_DATA_DIR-$POSTGRES_LAUNCHER_DIR/data}
-POSTGRES_SENSITIVE_DIR=${POSTGRES_SENSITIVE_DIR-$POSTGRES_LAUNCHER_DIR/sensitive}
+LAUNCHER_OWNER=${LAUNCHER_OWNER-$USER}
+export LAUNCHER_DIR=${LAUNCHER_DIR-/var/local}
+export POSTGRES_LAUNCHER_DIR=${POSTGRES_LAUNCHER_DIR-$LAUNCHER_DIR/postgres}
+
+export POSTGRES_LOG_DIR=${POSTGRES_LOG_DIR-/var/local/log/postgres}
+export POSTGRES_DATA_DIR=${POSTGRES_DATA_DIR-/var/local/data/postgres}
+export POSTGRES_SENSITIVE_DIR=${POSTGRES_SENSITIVE_DIR-/var/local/sensitive/postgres}
 POSTGRES_PORT=${POSTGRES_PORT-5432}
 POSTGRES_ADMIN_USERNAME=${POSTGRES_ADMIN_USERNAME-postgres}
 POSTGRES_ADMIN_PASSWORD=${POSTGRES_ADMIN_PASSWORD-yth3fn0t}
@@ -18,7 +21,6 @@ POSTGRES_CONF=${POSTGRES_CONF-./bits/postgres/files/postgresql.conf}
 POSTGRES_MAX_CONNECTIONS=${POSTGRES_MAX_CONNECTIONS-100}
 POSTGRES_SHARED_BUFFERS=${POSTGRES_SHARED_BUFFERS-256MB}
 POSTGRES_MAX_FILES_PER_PROCESS=${POSTGRES_MAX_FILES_PER_PROCESS-1000}
-
 
 #-----------
 # Install Script
@@ -39,19 +41,25 @@ if [[ "`which psql 2> /dev/null`" == "" ]] || [[ "`psql --version | grep 9.3`" =
 fi
 
 notify "  -- Copying config files"
-mkdir -p ${POSTGRES_LAUNCHER_DIR}/config ${POSTGRES_LOG_DIR} ${POSTGRES_DATA_DIR} ${POSTGRES_SENSITIVE_DIR}
+
+OWNER=$LAUNCHER_OWNER ./bits/bootstrap/mkdir \
+  LAUNCHER_DIR \
+  POSTGRES_LAUNCHER_DIR \
+  POSTGRES_LOG_DIR \
+  POSTGRES_DATA_DIR \
+  POSTGRES_SENSITIVE_DIR \
+  $POSTGRES_LAUNCHER_DIR/db \
+  $POSTGRES_LAUNCHER_DIR/config
+
+chmod -R 700 $POSTGRES_DATA_DIR
+
 cp ./bits/postgres/files/postgres.dockerfile ${POSTGRES_LAUNCHER_DIR}/Dockerfile
 TEMPLATE=./bits/postgres/files/psqlentry LOCATION=${POSTGRES_LAUNCHER_DIR}/config/psqlentry ./bits/docker/copyif
 LAUNCHER_DIR=$POSTGRES_LAUNCHER_DIR NAME=postgres ./bits/docker/build
 
-notify "  -- Creating helper scripts"
-echo "#!/bin/bash
-docker run -i -t \\
-  -v ${POSTGRES_LOG_DIR}:/log \\
-  -v ${POSTGRES_DATA_DIR}:/var/lib/postgresql/data \\
-  --link postgres:psqldb \\
-  postgres /bin/bash
-" > ${POSTGRES_LAUNCHER_DIR}/debug
+NAME=postgres DIR=$POSTGRES_LAUNCHER_DIR \
+  DEBUG=./bits/postgres/files/_debug \
+  ./bits/docker/helpers
 
 echo "#!/bin/bash
 # Don't run under -i as this script is called remotely via capistrano
@@ -173,7 +181,6 @@ NAME=postgres HOST=postgres.local DIR=$POSTGRES_LAUNCHER_DIR ./bits/docker/helpe
 
 chmod 755 $POSTGRES_LAUNCHER_DIR/init
 chmod 755 $POSTGRES_LAUNCHER_DIR/start
-chmod 755 $POSTGRES_LAUNCHER_DIR/debug
 chmod 755 $POSTGRES_LAUNCHER_DIR/newdb
 chmod 755 $POSTGRES_LAUNCHER_DIR/accessdb
 chmod 755 $POSTGRES_LAUNCHER_DIR/pgpass
