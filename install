@@ -10,7 +10,8 @@ LAUNCHER_OWNER=${LAUNCHER_OWNER-$USER}
 export LAUNCHER_DIR=${LAUNCHER_DIR-/var/local}
 export POSTGRES_LAUNCHER_DIR=${POSTGRES_LAUNCHER_DIR-$LAUNCHER_DIR/postgres}
 
-export POSTGRES_LOG_DIR=${POSTGRES_LOG_DIR-/var/local/log/postgres}
+export LOG_DIR=${LOG_DIR-/var/log}
+export POSTGRES_LOG_DIR=${POSTGRES_LOG_DIR-$LOG_DIR/postgres}
 export POSTGRES_DATA_DIR=${POSTGRES_DATA_DIR-/var/local/data/postgres}
 export POSTGRES_SENSITIVE_DIR=${POSTGRES_SENSITIVE_DIR-/var/local/sensitive/postgres}
 POSTGRES_PORT=${POSTGRES_PORT-5432}
@@ -30,16 +31,20 @@ notify "Installing POSTGRES..."
 PSQL_OUTPUT=/tmp/unzip.log
 
 if [[ "`which psql 2> /dev/null`" == "" ]] || [[ "`psql --version | grep 9.4`" == "" ]]; then
-  notify "  -- Installing psql client on host"
+
   if [[ "$OS" == "redhat" ]] || [[ "$OS" == "centos" ]]; then
+    notify "  -- Installing PSQL client on RHEL/CENTOS"
     mkdir -p /var/tmp
     yum install -y http://yum.postgresql.org/9.3/redhat/rhel-6-x86_64/pgdg-redhat93-9.3-1.noarch.rpm
     yum install -y postgresql93-server postgresql93-contrib
     cp -f /usr/pgsql-9.3/bin/* /usr/local/bin/
-  else
+  elif [[ "$OS" == "ubuntu" ]]; then
+    notify "  -- Installing PSQL client on Ubuntu"
     $SUDO apt-get install -y postgresql-client > $PSQL_OUTPUT 2>&1
     ERROR="Unable to install postgresql-client due to ..." ./bits/bootstrap/failonerrors $? $PSQL_OUTPUT
     [ $? -ne 0 ] && exit 1
+  else
+    debug "  -- Skipping PSQL client for Mac"
   fi
 else
   debug "  -- Psql client already installed on host"
@@ -77,13 +82,14 @@ exit 0
 " > ${POSTGRES_LAUNCHER_DIR}/init
 
 printf "%b" "#!/bin/bash
+source logging
 CONTAINER_ID=\`${POSTGRES_LAUNCHER_DIR}/running\`
 if [[ \"\$CONTAINER_ID\" == \"\" ]]; then
-  echo \"Starting POSTGRES ($POSTGRES_PORT, $POSTGRES_DATA_DIR)...\"
+  notify \"Starting POSTGRES ($POSTGRES_PORT, $POSTGRES_DATA_DIR)...\"
 
-  echo \"  -- Removing any stopped postgres containers\"
+  debug \"  -- Removing any stopped postgres containers\"
   docker rm postgres > /dev/null 2>&1
-  echo \"  -- Starting docker\"
+  debug \"  -- Starting docker\"
   docker run -d -t \\
     -p ${POSTGRES_PORT}:5432 \\
     -v ${POSTGRES_LOG_DIR}:/log \\
@@ -94,21 +100,21 @@ if [[ \"\$CONTAINER_ID\" == \"\" ]]; then
   IP=\$(${POSTGRES_LAUNCHER_DIR}/ip)
 
   if [[ \"\$IP\" == '' ]]; then
-    echo '  -- No IP address assigned when starting POSTGRES, not sure what went wrong.'
+    debug '  -- No IP address assigned when starting POSTGRES, not sure what went wrong.'
     exit 1
   fi
 
   if [[ \"\`cat /etc/hosts | grep postgres.local\`\" == '' ]]; then
-    echo \"  -- Adding postgres.local (\$IP) to /etc/hosts\"
+    debug \"  -- Adding postgres.local (\$IP) to /etc/hosts\"
     echo \"\$IP postgres.local\" >> /etc/hosts
   else
-    echo \"  -- Updating postgres.local (\$IP) in /etc/hosts\"
+    debug \"  -- Updating postgres.local (\$IP) in /etc/hosts\"
     sed -i \"s|.*postgres.local|\$IP postgres.local|g\" /etc/hosts
   fi
 
-  echo \"DONE, Starting POSTGRES \$IP\"
+  notify \"DONE, Starting POSTGRES \$IP\"
 else
-  echo \"Container postgres already running, ${POSTGRES_LAUNCHER_DIR}/restart to restart it\"
+  debug \"Container postgres already running, ${POSTGRES_LAUNCHER_DIR}/restart to restart it\"
 fi
 " > ${POSTGRES_LAUNCHER_DIR}/start
 
