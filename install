@@ -27,17 +27,22 @@ POSTGRES_MAX_FILES_PER_PROCESS=${POSTGRES_MAX_FILES_PER_PROCESS-1000}
 #-----------
 
 notify "Installing POSTGRES..."
+PSQL_OUTPUT=/tmp/unzip.log
 
-if [[ "`which psql 2> /dev/null`" == "" ]] || [[ "`psql --version | grep 9.3`" == "" ]]; then
-  notify "  -- Installing psql"
+if [[ "`which psql 2> /dev/null`" == "" ]] || [[ "`psql --version | grep 9.4`" == "" ]]; then
+  notify "  -- Installing psql client on host"
   if [[ "$OS" == "redhat" ]] || [[ "$OS" == "centos" ]]; then
     mkdir -p /var/tmp
     yum install -y http://yum.postgresql.org/9.3/redhat/rhel-6-x86_64/pgdg-redhat93-9.3-1.noarch.rpm
     yum install -y postgresql93-server postgresql93-contrib
     cp -f /usr/pgsql-9.3/bin/* /usr/local/bin/
   else
-    apt-get install -y postgresql-client
+    $SUDO apt-get install -y postgresql-client > $PSQL_OUTPUT 2>&1
+    ERROR="Unable to install postgresql-client due to ..." ./bits/bootstrap/failonerrors $? $PSQL_OUTPUT
+    [ $? -ne 0 ] && exit 1
   fi
+else
+  debug "  -- Psql client already installed on host"
 fi
 
 notify "  -- Copying config files"
