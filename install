@@ -62,8 +62,6 @@ OWNER=$LAUNCHER_OWNER ./bits/bootstrap/mkdir \
   $POSTGRES_LAUNCHER_DIR/db \
   $POSTGRES_LAUNCHER_DIR/config
 
-chmod -R 700 $POSTGRES_DATA_DIR
-
 cp ./bits/postgres/files/postgres.dockerfile ${POSTGRES_LAUNCHER_DIR}/Dockerfile
 TEMPLATE=./bits/postgres/files/psqlentry LOCATION=${POSTGRES_LAUNCHER_DIR}/config/psqlentry ./bits/docker/copyif
 LAUNCHER_DIR=$POSTGRES_LAUNCHER_DIR NAME=postgres ./bits/docker/build
@@ -78,6 +76,7 @@ echo "#!/bin/bash
 docker run -t \\
   -v ${POSTGRES_LOG_DIR}:/log \\
   -v ${POSTGRES_DATA_DIR}:/var/lib/postgresql/data \\
+  -e POSTGRES_PASSWORD=$POSTGRES_ADMIN_PASSWORD \\
   postgres init
 exit 0
 " > ${POSTGRES_LAUNCHER_DIR}/init
@@ -199,10 +198,16 @@ chmod 755 $POSTGRES_LAUNCHER_DIR/pgpass
 
 notify "  -- Initializing DB ($POSTGRES_LAUNCHER_DIR/init)"
 $POSTGRES_LAUNCHER_DIR/init
-notify "  -- Setting up postgres conf"
-TEMPLATE=${POSTGRES_CONF} \
-  LOCATION=${POSTGRES_DATA_DIR}/postgresql.conf \
-  ./bits/docker/copyif @POSTGRES_MAX_CONNECTIONS@ $POSTGRES_MAX_CONNECTIONS @POSTGRES_SHARED_BUFFERS@ $POSTGRES_SHARED_BUFFERS @POSTGRES_MAX_FILES_PER_PROCESS@ $POSTGRES_MAX_FILES_PER_PROCESS
+
+if [[ -e ${POSTGRES_DATA_DIR}/PG_VERSION ]]; then
+  notify "  -- Setting up postgres conf"
+  TEMPLATE=${POSTGRES_CONF} \
+    LOCATION=${POSTGRES_DATA_DIR}/postgresql.conf \
+    ./bits/docker/copyif @POSTGRES_MAX_CONNECTIONS@ $POSTGRES_MAX_CONNECTIONS @POSTGRES_SHARED_BUFFERS@ $POSTGRES_SHARED_BUFFERS @POSTGRES_MAX_FILES_PER_PROCESS@ $POSTGRES_MAX_FILES_PER_PROCESS
+else
+  error "Initializing postgres db did not appear to work, please investigate $POSTGRES_LAUNCHER_DIR/init"
+  exit 1
+fi
 
 notify "  -- Configuring helper access to postgres"
 $POSTGRES_LAUNCHER_DIR/accessdb postgres $POSTGRES_ADMIN_USERNAME $POSTGRES_ADMIN_PASSWORD
