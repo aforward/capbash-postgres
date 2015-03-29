@@ -24,12 +24,19 @@ POSTGRES_MAX_CONNECTIONS=${POSTGRES_MAX_CONNECTIONS-100}
 POSTGRES_SHARED_BUFFERS=${POSTGRES_SHARED_BUFFERS-256MB}
 POSTGRES_MAX_FILES_PER_PROCESS=${POSTGRES_MAX_FILES_PER_PROCESS-1000}
 
+POSTGRES_DISPLAY=${POSTGRES_DISPLAY-standalone} # or internal
+
 #-----------
 # Install Script
 #-----------
 
-notify "Installing POSTGRES..."
-PSQL_OUTPUT=/tmp/unzip.log
+if [[ "$POSTGRES_DISPLAY" == "standalone" ]]; then
+  notify "Installing POSTGRES..."
+else
+  notify "  -- Installing POSTGRES..."
+fi
+
+PSQL_OUTPUT=/tmp/psql.log
 
 if [[ "`which psql 2> /dev/null`" == "" ]] || [[ "`psql --version | grep 9.4`" == "" ]]; then
 
@@ -60,10 +67,12 @@ OWNER=$LAUNCHER_OWNER ./bits/bootstrap/mkdir \
   POSTGRES_DATA_DIR \
   POSTGRES_SENSITIVE_DIR \
   $POSTGRES_LAUNCHER_DIR/db \
-  $POSTGRES_LAUNCHER_DIR/config
+  $POSTGRES_LAUNCHER_DIR/config \
+  $POSTGRES_LAUNCHER_DIR/bin
 
 cp ./bits/postgres/files/postgres.dockerfile ${POSTGRES_LAUNCHER_DIR}/Dockerfile
 TEMPLATE=./bits/postgres/files/psqlentry LOCATION=${POSTGRES_LAUNCHER_DIR}/config/psqlentry ./bits/docker/copyif
+TEMPLATE=./bits/postgres/files/bin LOCATION=$POSTGRES_LAUNCHER_DIR/bin ./bits/docker/copyallif
 LAUNCHER_DIR=$POSTGRES_LAUNCHER_DIR NAME=postgres ./bits/docker/build
 
 NAME=postgres DIR=$POSTGRES_LAUNCHER_DIR BIT=postgres ./bits/docker/helpers
@@ -195,7 +204,9 @@ chmod 755 $POSTGRES_LAUNCHER_DIR/accessdb
 chmod 755 $POSTGRES_LAUNCHER_DIR/pgpass
 
 notify "  -- Initializing DB ($POSTGRES_LAUNCHER_DIR/init)"
-$POSTGRES_LAUNCHER_DIR/init
+SCRIPT_OUTPUT=$($POSTGRES_LAUNCHER_DIR/init > $PSQL_OUTPUT 2>&1)
+ERROR="Unable to init postgres due to ..." ./bits/bootstrap/failonerrors $? $PSQL_OUTPUT
+[ $? -ne 0 ] && exit 1
 
 if [[ -e ${POSTGRES_DATA_DIR}/PG_VERSION ]]; then
   notify "  -- Setting up postgres conf"
@@ -210,4 +221,8 @@ fi
 notify "  -- Configuring helper access to postgres"
 $POSTGRES_LAUNCHER_DIR/accessdb postgres $POSTGRES_ADMIN_USERNAME $POSTGRES_ADMIN_PASSWORD
 
-notify "Done, Installing POSTGRES."
+if [[ "$POSTGRES_DISPLAY" == "standalone" ]]; then
+  notify "Done, Installing POSTGRES."
+else
+  notify "  -- Done, Installing POSTGRES."
+fi
