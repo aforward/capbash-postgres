@@ -15,7 +15,8 @@ export LOG_DIR=${LOG_DIR-/var/log}
 export POSTGRES_LOG_DIR=${POSTGRES_LOG_DIR-$LOG_DIR/postgres}
 export POSTGRES_DATA_DIR=${POSTGRES_DATA_DIR-$DATA_DIR/postgres}
 export POSTGRES_SENSITIVE_DIR=${POSTGRES_SENSITIVE_DIR-/var/local/sensitive/postgres}
-POSTGRES_PORT=${POSTGRES_PORT-5432}
+export POSTGRES_PORT=${POSTGRES_PORT-5432}
+export POSTGRES_HOST=${POSTGRES_HOST-"127.0.0.1:"}
 POSTGRES_ADMIN_USERNAME=${POSTGRES_ADMIN_USERNAME-postgres}
 POSTGRES_ADMIN_PASSWORD=${POSTGRES_ADMIN_PASSWORD-yth3fn0t}
 
@@ -98,7 +99,7 @@ if [[ \"\$CONTAINER_ID\" == \"\" ]]; then
   docker rm postgres > /dev/null 2>&1
   debug \"  -- Starting docker\"
   docker run -d -t \\
-    -p ${POSTGRES_PORT}:5432 \\
+    -p ${POSTGRES_HOST}${POSTGRES_PORT}:5432 \\
     -v ${POSTGRES_LOG_DIR}:/log \\
     -v ${POSTGRES_DATA_DIR}:/var/lib/postgresql/data \\
     --name postgres \\
