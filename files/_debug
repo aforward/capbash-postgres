@@ -1,5 +1,6 @@
 docker run -i -t
   -e 'PGUSER=$POSTGRES_ADMIN_USERNAME'
+  -e "PGHOST=\`\$( cd "\$( dirname "\${BASH_SOURCE[0]}" )" && pwd )/ip\`"
   -e 'DAEMON=true'
   -v $POSTGRES_LOG_DIR:/log
   -v $POSTGRES_DATA_DIR:/var/lib/postgresql/data

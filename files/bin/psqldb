@@ -1,0 +1,2 @@
+#!/bin/bash
+psql -h $PSQLDB_PORT_5432_TCP_ADDR -p $PSQLDB_PORT_5432_TCP_PORT -U postgres $@

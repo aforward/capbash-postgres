@@ -88,7 +88,7 @@ docker run -t \\
   -v ${POSTGRES_LOG_DIR}:/log \\
   -v ${POSTGRES_DATA_DIR}:/var/lib/postgresql/data \\
   -e POSTGRES_PASSWORD=$POSTGRES_ADMIN_PASSWORD \\
-  postgres init
+  postgres init_psql
 exit 0
 " > ${POSTGRES_LAUNCHER_DIR}/init
 

@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y locales && rm -rf /var/lib/apt/lists/* 
   && localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
 ENV LANG en_US.utf8
 
-RUN mkdir /docker-entrypoint-initdb.d
+# RUN mkdir /docker-entrypoint-initdb.d
 
 RUN apt-key adv --keyserver pool.sks-keyservers.net --recv-keys B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8
 
@@ -42,10 +42,6 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/* \
   && chmod -R +x /usr/local/dockerbin/ \
   && apt-get purge -y --auto-remove curl
 
-RUN echo "psql -h \$PSQLDB_PORT_5432_TCP_ADDR -p \$PSQLDB_PORT_5432_TCP_PORT -U postgres \$@" > /usr/local/bin/psqldb && \
-    chmod 755 /usr/local/bin/psqldb
-
-ENTRYPOINT ["/usr/local/dockerbin/psqlentry"]
 EXPOSE 5432
-CMD ["postgres"]
+CMD ["up_psql"]
 
