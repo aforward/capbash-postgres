@@ -11,9 +11,11 @@ export POSTGRES_LAUNCHER_DIR=${POSTGRES_LAUNCHER_DIR-$LAUNCHER_DIR/postgres}
 
 export DATA_DIR=${DATA_DIR-/var/local/data}
 export LOG_DIR=${LOG_DIR-/var/log}
+export SENSITIVE_DIR=${SENSITIVE_DIR-/var/local/sensitive}
+
 export POSTGRES_LOG_DIR=${POSTGRES_LOG_DIR-$LOG_DIR/postgres}
 export POSTGRES_DATA_DIR=${POSTGRES_DATA_DIR-$DATA_DIR/postgres}
-export POSTGRES_SENSITIVE_DIR=${POSTGRES_SENSITIVE_DIR-/var/local/sensitive/postgres}
+export POSTGRES_SENSITIVE_DIR=${POSTGRES_SENSITIVE_DIR-$SENSITIVE_DIR/postgres}
 export POSTGRES_PORT=${POSTGRES_PORT-5432}
 export POSTGRES_HOST=${POSTGRES_HOST-"127.0.0.1:"}
 POSTGRES_ADMIN_USERNAME=${POSTGRES_ADMIN_USERNAME-postgres}
@@ -71,11 +73,13 @@ OWNER=$LAUNCHER_OWNER ./bits/bootstrap/mkdir \
   $POSTGRES_LAUNCHER_DIR/bin
 
 cp ./bits/postgres/files/postgres.dockerfile ${POSTGRES_LAUNCHER_DIR}/Dockerfile
-TEMPLATE=./bits/postgres/files/psqlentry LOCATION=${POSTGRES_LAUNCHER_DIR}/config/psqlentry ./bits/docker/copyif
 TEMPLATE=./bits/postgres/files/bin LOCATION=$POSTGRES_LAUNCHER_DIR/bin ./bits/docker/copyallif
-LAUNCHER_DIR=$POSTGRES_LAUNCHER_DIR NAME=postgres ./bits/docker/build
 
-NAME=postgres DIR=$POSTGRES_LAUNCHER_DIR BIT=postgres ./bits/docker/helpers
+debug "  -- Making logger available on node"
+./bits/bootstrap/cp ./bits/bootstrap/logging $POSTGRES_LAUNCHER_DIR/bin/logging
+./bits/bootstrap/cp ./bits/bootstrap/failonerrors $POSTGRES_LAUNCHER_DIR/bin/failonerrors
+
+LAUNCHER_DIR=$POSTGRES_LAUNCHER_DIR NAME=postgres ./bits/docker/build
 
 echo "#!/bin/bash
 # Don't run under -i as this script is called remotely via capistrano
@@ -87,44 +91,6 @@ docker run -t \\
   postgres init
 exit 0
 " > ${POSTGRES_LAUNCHER_DIR}/init
-
-printf "%b" "#!/bin/bash
-source logging
-CONTAINER_ID=\`${POSTGRES_LAUNCHER_DIR}/running\`
-if [[ \"\$CONTAINER_ID\" == \"\" ]]; then
-  notify \"Starting POSTGRES ($POSTGRES_PORT, $POSTGRES_DATA_DIR)...\"
-
-  debug \"  -- Removing any stopped postgres containers\"
-  docker rm postgres > /dev/null 2>&1
-  debug \"  -- Starting docker\"
-  docker run -d -t \\
-    -p ${POSTGRES_HOST}${POSTGRES_PORT}:5432 \\
-    -v ${POSTGRES_LOG_DIR}:/log \\
-    -v ${POSTGRES_DATA_DIR}:/var/lib/postgresql/data \\
-    --name postgres \\
-    postgres 2> /dev/null > ${POSTGRES_LAUNCHER_DIR}/container.pid
-
-  IP=\$(${POSTGRES_LAUNCHER_DIR}/ip)
-
-  if [[ \"\$IP\" == '' ]]; then
-    debug '  -- No IP address assigned when starting POSTGRES, not sure what went wrong.'
-    exit 1
-  fi
-
-  if [[ \"\`cat /etc/hosts | grep postgres.local\`\" == '' ]]; then
-    debug \"  -- Adding postgres.local (\$IP) to /etc/hosts\"
-    echo \"\$IP postgres.local\" >> /etc/hosts
-  else
-    debug \"  -- Updating postgres.local (\$IP) in /etc/hosts\"
-    sed -i \"s|.*postgres.local|\$IP postgres.local|g\" /etc/hosts
-  fi
-
-  notify \"DONE, Starting POSTGRES \$IP\"
-else
-  debug \"Container postgres already running, ${POSTGRES_LAUNCHER_DIR}/restart to restart it\"
-fi
-" > ${POSTGRES_LAUNCHER_DIR}/start
-
 
 printf "%b" "#!/bin/bash
 USER=\${USER-$POSTGRES_ADMIN_USERNAME}
@@ -195,7 +161,7 @@ echo \"PGHOST=postgres.local pg_restore --dbname=postgres --username=\$USER --ro
 chmod 755 \$DBFILE \$DUMPFILE \$RESTOREFILE
 " > ${POSTGRES_LAUNCHER_DIR}/accessdb
 
-NAME=postgres HOST=postgres.local DIR=$POSTGRES_LAUNCHER_DIR ./bits/docker/helpers
+NAME=postgres HOST=postgres.local DIR=$POSTGRES_LAUNCHER_DIR BIT=postgres ./bits/docker/helpers
 
 chmod 755 $POSTGRES_LAUNCHER_DIR/init
 chmod 755 $POSTGRES_LAUNCHER_DIR/start
@@ -207,6 +173,12 @@ notify "  -- Initializing DB ($POSTGRES_LAUNCHER_DIR/init)"
 SCRIPT_OUTPUT=$($POSTGRES_LAUNCHER_DIR/init > $PSQL_OUTPUT 2>&1)
 ERROR="Unable to init postgres due to ..." ./bits/bootstrap/failonerrors $? $PSQL_OUTPUT
 [ $? -ne 0 ] && exit 1
+
+if [[ "$OS" == "mac" ]]; then
+  debug "  -- Permissions hack on $POSTGRES_DATA_DIR setting full access"
+  $SUDO chmod -R 700 $POSTGRES_DATA_DIR
+  $SUDO chown -R $LAUNCHER_OWNER $POSTGRES_DATA_DIR
+fi
 
 if [[ -e ${POSTGRES_DATA_DIR}/PG_VERSION ]]; then
   notify "  -- Setting up postgres conf"

@@ -1,5 +1,8 @@
-docker run -i -t
+docker run -d -t
   -e 'PGUSER=$POSTGRES_ADMIN_USERNAME'
-  -e 'DAEMON=true'
+  -e 'DAEMON=false'
+  -p ${POSTGRES_HOST}${POSTGRES_PORT}:5432
   -v $POSTGRES_LOG_DIR:/log
   -v $POSTGRES_DATA_DIR:/var/lib/postgresql/data
+  --name=postgres
+  postgres:latest

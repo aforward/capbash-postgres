@@ -1,0 +1,21 @@
+#!/bin/bash
+source logging
+
+if [[ ! -e "$PGDATA" ]]; then
+  debug "  -- No $PGDATA dir, so nothing to hack."
+
+else
+  notify "  -- Update PSQL permissions hack on $PGDATA"
+
+  debug "    >> Backup PSQL"
+  mkdir -p /tmp/psql-copy
+  cp -R $PGDATA/* /tmp/psql-copy/
+  debug "    >> Remove $PGDATA"
+  rm -rf $PGDATA/*
+  debug "    >> Add back $PGDATA"
+  cp -R /tmp/psql-copy/* $PGDATA/
+  debug "    >> Update permissions"
+  chmod -R 0700 $PGDATA
+  chown -R postgres $PGDATA
+  debug "  -- DONE, Update PSQL permissions on $PGDATA"
+fi

@@ -1,0 +1,56 @@
+#!/bin/bash
+source logging
+
+SERVICE_LOG_DIR=/log/psql
+LOG_FILE=$SERVICE_LOG_DIR/startup.log
+DAEMON=${DAEMON-false}
+
+PSQL_STATUS=$(su -c "PATH=$PATH pg_ctl -D $PGDATA status" postgres)
+
+if [[ "$PSQL_STATUS" == *"server is running"* ]]; then
+  debug "Psql appears to already be running (`cat $SERVICE_LOG_DIR/psql.pid`)"
+else
+  notify "Starting psql ($CONFIG_DIR)"
+
+  hackpsql
+
+  mkdir -p $SERVICE_LOG_DIR
+  chown -R postgres $SERVICE_LOG_DIR
+
+  if [[ ! -e "$PGDATA" ]]; then
+    debug "  -- Creating $PGDATA"
+    mkdir -p "$PGDATA"
+    chown -R postgres "$PGDATA"
+  fi
+
+  if [[ ! -e "$PGDATA/PG_VERSION" ]]; then
+    debug "  -- Removing existing content from $PGDATA"
+    rm -rf $PGDATA/*
+
+    debug "  -- Initializing $PGDATA"
+    chown -R postgres "$PGDATA"
+    IGNORE=$(gosu postgres initdb > $LOG_FILE 2>&1)
+    ERROR="Error initializing postgres, due to ..." failonerrors $? $LOG_FILE
+    [ $? -ne 0 ] && exit 1
+
+    debug "  -- Modifying base configs ($PGDATA/postgresql.conf)"
+    sed -ri "s/^#(listen_addresses\s*=\s*)\S+/\1'*'/" $PGDATA/postgresql.conf
+
+    debug "  -- Allowing full access ($PGDATA/pg_hba.conf)"
+    { echo; echo 'host all all 0.0.0.0/0 trust'; } >> $PGDATA/pg_hba.conf
+  else
+    debug "  -- $PGDATA already initialized (rm $PGDATA/PG_VERSION if you want to force it to initialize again)"
+  fi
+
+  if [[ "$DAEMON" == "true" ]]; then
+    notify "  -- Starting postgres daemon ($SERVICE_LOG_DIR/psql.pid)"
+    IGNORE=$(su -c "PATH=$PATH pg_ctl -D $PGDATA -l $SERVICE_LOG_DIR/pg_ctl.log -o \"-c external_pid_file=$SERVICE_LOG_DIR/psql.pid -c max_connections=1000 -c shared_buffers=256MB -c max_files_per_process=500\" start" postgres > $LOG_FILE 2>&1)
+    ERROR="Error starting daemon, due to ..." failonerrors $? $LOG_FILE
+    [ $? -ne 0 ] && exit 1
+    notify "DONE, Starting psql (`cat $SERVICE_LOG_DIR/psql.pid`)"
+  else
+    notify "  -- Starting postgres in the foreground"
+    IGNORE=$(su -c "PATH=$PATH postgres -D $PGDATA -o \"-c external_pid_file=$SERVICE_LOG_DIR/psql.pid -c max_connections=1000 -c shared_buffers=256MB -c max_files_per_process=500\"" postgres)
+  fi
+
+fi
