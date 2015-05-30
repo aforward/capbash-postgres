@@ -203,7 +203,7 @@ fi
 notify "  -- Configuring helper access to postgres"
 $POSTGRES_LAUNCHER_DIR/accessdb postgres $POSTGRES_ADMIN_USERNAME $POSTGRES_ADMIN_PASSWORD
 
-DIR=$POSTGRES_LAUNCHER_DIR ./bits/bootstrap/cleanup
+DIR=./bits/postgres ./bits/bootstrap/cleanup
 
 if [[ "$POSTGRES_DISPLAY" == "standalone" ]]; then
   notify "Done, Installing POSTGRES."
