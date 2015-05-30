@@ -18,6 +18,11 @@ export POSTGRES_DATA_DIR=${POSTGRES_DATA_DIR-$DATA_DIR/postgres}
 export POSTGRES_SENSITIVE_DIR=${POSTGRES_SENSITIVE_DIR-$SENSITIVE_DIR/postgres}
 export POSTGRES_PORT=${POSTGRES_PORT-5432}
 export POSTGRES_HOST=${POSTGRES_HOST-"127.0.0.1:"}
+
+export POSTGRES_MAJOR=${POSTGRES_MAJOR-9.4}
+export POSTGRES_MINOR=${POSTGRES_MINOR-9.4.2}
+export POSTGRES_VERSION=${POSTGRES_VERSION-9.4.2-1.pgdg70+1}
+
 POSTGRES_ADMIN_USERNAME=${POSTGRES_ADMIN_USERNAME-postgres}
 POSTGRES_ADMIN_PASSWORD=${POSTGRES_ADMIN_PASSWORD-yth3fn0t}
 
@@ -73,13 +78,18 @@ OWNER=$LAUNCHER_OWNER ./bits/bootstrap/mkdir \
   $POSTGRES_LAUNCHER_DIR/bin
 
 cp ./bits/postgres/files/postgres.dockerfile ${POSTGRES_LAUNCHER_DIR}/Dockerfile
+
+OWNER=$LAUNCHER_OWNER LAUNCHER_DIR=$POSTGRES_LAUNCHER_DIR BIT=postgres ./bits/docker/copydockerfile \
+  @POSTGRES_MAJOR@ $POSTGRES_MAJOR \
+  @POSTGRES_VERSION@ $POSTGRES_VERSION
+
 TEMPLATE=./bits/postgres/files/bin LOCATION=$POSTGRES_LAUNCHER_DIR/bin ./bits/docker/copyallif
 
 debug "  -- Making logger available on node"
-./bits/bootstrap/cp ./bits/bootstrap/logging $POSTGRES_LAUNCHER_DIR/bin/logging
-./bits/bootstrap/cp ./bits/bootstrap/failonerrors $POSTGRES_LAUNCHER_DIR/bin/failonerrors
+TEMPLATE=./bits/bootstrap/logging LOCATION=$POSTGRES_LAUNCHER_DIR/bin/logging ./bits/docker/copyif
+TEMPLATE=./bits/bootstrap/failonerrors LOCATION=$POSTGRES_LAUNCHER_DIR/bin/failonerrors ./bits/docker/copyif
 
-LAUNCHER_DIR=$POSTGRES_LAUNCHER_DIR NAME=postgres ./bits/docker/build
+LAUNCHER_DIR=$POSTGRES_LAUNCHER_DIR NAME=postgres VERSION=$POSTGRES_MINOR ./bits/docker/build
 
 echo "#!/bin/bash
 # Don't run under -i as this script is called remotely via capistrano
@@ -192,6 +202,8 @@ fi
 
 notify "  -- Configuring helper access to postgres"
 $POSTGRES_LAUNCHER_DIR/accessdb postgres $POSTGRES_ADMIN_USERNAME $POSTGRES_ADMIN_PASSWORD
+
+DIR=$POSTGRES_LAUNCHER_DIR ./bits/bootstrap/cleanup
 
 if [[ "$POSTGRES_DISPLAY" == "standalone" ]]; then
   notify "Done, Installing POSTGRES."
