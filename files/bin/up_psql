@@ -1,5 +1,6 @@
 #!/bin/bash
 source logging
+source myenv
 
 SERVICE_LOG_DIR=/log/psql
 LOG_FILE=$SERVICE_LOG_DIR/startup.log
@@ -10,7 +11,7 @@ PSQL_STATUS=$(su -c "PATH=$PATH pg_ctl -D $PGDATA status" postgres)
 if [[ "$PSQL_STATUS" == *"server is running"* ]]; then
   debug "Psql appears to already be running (`cat $SERVICE_LOG_DIR/psql.pid`)"
 else
-  notify "Starting psql ($CONFIG_DIR)"
+  notify "Starting psql ($PGDATA)"
 
   hackpsql
 
